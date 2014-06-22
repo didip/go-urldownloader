@@ -43,29 +43,41 @@ func main() {
         if r.Method == "POST" {
             url    := r.FormValue("url")
 
-            response, err := http.Get(url)
-
-            if err != nil {
-                lumber.Error("%s", err)
-
-            } else {
-                defer response.Body.Close()
-
-                content, err := ioutil.ReadAll(response.Body)
+            if url != "" {
+                response, err := http.Get(url)
 
                 if err != nil {
                     lumber.Error("%s", err)
 
                 } else {
-                    s3Item      := StripURLProtocol(url)
-                    contentType := http.DetectContentType(content)
+                    defer response.Body.Close()
 
-                    err = s3Bucket.Put(s3Item, content, contentType, s3.PublicRead)
+                    content, err := ioutil.ReadAll(response.Body)
 
                     if err != nil {
                         lumber.Error("%s", err)
+
+                    } else {
+                        contentType := http.DetectContentType(content)
+
+                        w.Header().Set("Content-Type", contentType)
+                        w.Write(content)
+
+                        go func(url string, contentType string, content []byte) {
+                            s3Item := StripURLProtocol(url)
+
+                            err = s3Bucket.Put(s3Item, content, contentType, s3.PublicRead)
+
+                            if err != nil {
+                                lumber.Error("%s", err)
+                            }
+                        }(url, contentType, content)
                     }
                 }
+
+            } else {
+                lumber.Error("URL is empty.")
+                w.Write([]byte(""))
             }
         }
     })
